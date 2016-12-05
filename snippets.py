@@ -1,9 +1,15 @@
 import logging
 import argparse
+import psycopg2
+
 
 # Set the log output file, and the log level
 logging.basicConfig(filename="snippets.log", level=logging.DEBUG)
 
+#Postgres SQL db connection
+logging.debug("Connecting to PostgreSQL")
+connection = psycopg2.connect(database="snippets")
+logging.debug("Database connection established")
 
 def put(name, snippet):
     """
@@ -11,9 +17,14 @@ def put(name, snippet):
     
     Returns the name and the snippet
     """
-    logging.error("FIXME: Unimplemented - put({!r}, {!r})".format(name, snippet))
+    logging.info("Storing snippet ({!r}: {!r})".format(name, snippet))
+    cursor = connection.cursor()
+    command = "INSERT INTO snippets VALUES (%s, %s)"
+    cursor.execute(command, (name, snippet))
+    connection.commit()
+    logging.debug("Snippet stored successfully.")
     return name, snippet
-    
+
 def get(name):
     """
     Retrieve the snippet with a given name.
@@ -22,10 +33,14 @@ def get(name):
     
     Returns the snippet.
     """
-    
-    logging.error("FIXME: Unimplemented - get({!r})".format(name))
-    return ""
-    
+    logging.info("Retrieving snippet {!r}".format(name))
+    cursor = connection.cursor()
+    command = "SELECT message FROM snippets WHERE keyword = %s"
+    cursor.execute(command, (name,))
+    snippet = cursor.fetchone()
+    logging.debug("Snippet retrieved successfully.")
+    return snippet
+
 
 def main():
     """Main function"""
@@ -47,14 +62,11 @@ def main():
     
     
     arguments = parser.parse_args()
-    print(arguments)
     # Convert parsed arguments from Namespace to dictionary
     arguments = vars(arguments)
-    print(arguments)
 
     command = arguments.pop("command")
-    print(arguments)
-    
+
     if command == "put":
         name, snippet = put(**arguments)
         print("Stored {!r} as {!r}".format(snippet, name))
@@ -62,7 +74,6 @@ def main():
         snippet = get(**arguments)
         print("Retrieved snippet: {!r}".format(snippet))
 
-    print(arguments)
 
 if __name__ == "__main__":
     main()
