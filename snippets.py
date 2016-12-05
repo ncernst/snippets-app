@@ -19,8 +19,27 @@ def put(name, snippet):
     """
     logging.info("Storing snippet ({!r}: {!r})".format(name, snippet))
     cursor = connection.cursor()
-    command = "INSERT INTO snippets VALUES (%s, %s)"
-    cursor.execute(command, (name, snippet))
+    try:
+        command = "INSERT INTO snippets VALUES (%s, %s)"
+        cursor.execute(command, (name, snippet))
+    except psycopg2.IntegrityError as e:
+        
+        logging.info("User attempted to store snippet with existing keyword.")
+        print("There is already a snippet with that name, do you want to update it? Y/N")
+        choice = input(">>> ").lower()
+        if choice == 'y':
+            connection.rollback()
+            update(name, snippet)
+        else:
+            print("Would you like to choose a new name for this snippet? Y/N")
+            choice = input(">>> ").lower()
+            if choice == 'y':
+                logging.info("User selecting new keyword for snippet to store.")
+                print("Please enter the new name")
+                put(name, snippet)
+            else:
+                exit()
+        
     connection.commit()
     logging.debug("Snippet stored successfully.")
     return name, snippet
@@ -35,13 +54,31 @@ def get(name):
     """
     logging.info("Retrieving snippet {!r}".format(name))
     cursor = connection.cursor()
-    command = "SELECT message FROM snippets WHERE keyword = %s"
-    cursor.execute(command, (name,))
-    snippet = cursor.fetchone()
+    with connection, connection.cursor() as cursor:
+        cursor.execute("select message from snippets where keyword=%s", (name,))
+        snippet = cursor.fetchone()
+    if not snippet:
+        # No snippet was found with that name
+        logging.debug("Snippet wasn't found with keyword provided by user.")
+        return '404: Snippet Not Found'
+    
     logging.debug("Snippet retrieved successfully.")
     return snippet
 
+def update(name, snippet):
+    """
+    
+    Update the snippet with a given name.
 
+    """    
+    logging.info("Updating existing keyword {!r} with {!r}.".format(name, snippet))
+    command = "update snippets set message=%s where keyword=%s"
+    cursor = connection.cursor()
+    cursor.execute(command, (snippet, name))
+    connection.commit()
+    logging.debug("Snippet updated successfully.")
+
+    
 def main():
     """Main function"""
     logging.info("Constructing parser")
