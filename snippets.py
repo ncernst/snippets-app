@@ -11,6 +11,22 @@ logging.debug("Connecting to PostgreSQL")
 connection = psycopg2.connect(database="snippets")
 logging.debug("Database connection established")
 
+def checkForRow(name):
+    """
+    
+    Checks to see if a row exists for provided keyword
+    
+    """
+    logging.info("Checking to see if row exists for keyword ({!r}".format(name))
+    with connection, connection.cursor() as cursor:
+        cursor.execute("SELECT keyword FROM snippets WHERE keyword = %s", (name,))
+        rowExists = cursor.fetchone()
+    if not rowExists:
+        return False
+    else:
+        return True
+        
+
 def put(name, snippet):
     """
     Store a snippet with an associated name.
@@ -18,13 +34,12 @@ def put(name, snippet):
     Returns the name and the snippet
     """
     logging.info("Storing snippet ({!r}: {!r})".format(name, snippet))
-    cursor = connection.cursor()
-    try:
-        command = "INSERT INTO snippets VALUES (%s, %s)"
-        cursor.execute(command, (name, snippet))
-    except psycopg2.IntegrityError as e:
-        
-        logging.info("User attempted to store snippet with existing keyword.")
+    rowExists = checkForRow(name)
+    if not rowExists:
+        with connection, connection.cursor() as cursor:
+            cursor.execute("INSERT INTO snippets VALUES (%s, %s)", (name, snippet))
+    if rowExists:
+        logging.debug("User attempted to store snippet with existing keyword.")
         print("There is already a snippet with that name, do you want to update it? Y/N")
         choice = input(">>> ").lower()
         if choice == 'y':
@@ -36,11 +51,12 @@ def put(name, snippet):
             if choice == 'y':
                 logging.info("User selecting new keyword for snippet to store.")
                 print("Please enter the new name")
+                name = input(">>> ")
+                connection.rollback()
                 put(name, snippet)
             else:
                 exit()
-        
-    connection.commit()
+
     logging.debug("Snippet stored successfully.")
     return name, snippet
 
@@ -65,6 +81,18 @@ def get(name):
     logging.debug("Snippet retrieved successfully.")
     return snippet
 
+def catalogue():
+    """
+    
+    Return a catalogue of all stored keywords to the user.
+
+    """   
+    logging.info("Retrieving catalogue of keywords.")
+    with connection, connection.cursor() as cursor:
+        cursor.execute("SELECT keyword FROM snippets")
+        catalogue = cursor.fetchall()
+    return catalogue
+
 def update(name, snippet):
     """
     
@@ -72,12 +100,10 @@ def update(name, snippet):
 
     """    
     logging.info("Updating existing keyword {!r} with {!r}.".format(name, snippet))
-    command = "update snippets set message=%s where keyword=%s"
-    cursor = connection.cursor()
-    cursor.execute(command, (snippet, name))
-    connection.commit()
+    with connection, connection.cursor() as cursor:
+        cursor.execute("update snippets set message=%s where keyword=%s", (snippet, name))
     logging.debug("Snippet updated successfully.")
-
+    return name, snippet
     
 def main():
     """Main function"""
@@ -97,6 +123,15 @@ def main():
     get_parser = subparsers.add_parser("get", help="Retrieve a snippet of text")
     get_parser.add_argument("name", help="Name of the snippet to retrieve")
     
+    #Subparser for the update command
+    logging.debug("Constructing update subparser")
+    update_parser = subparsers.add_parser("update", help="Update an existing snippet based on keyword")
+    update_parser.add_argument("name", help="Keyword of snippet to update")
+    update_parser.add_argument("snippet", help="The updated snippet text")
+    
+    #Subparser for the catalogue command
+    logging.debug("Constructing catalogue subparser")
+    catalogue_parser = subparsers.add_parser("catalogue", help="Display a list of snippet keywords")
     
     arguments = parser.parse_args()
     # Convert parsed arguments from Namespace to dictionary
@@ -110,6 +145,15 @@ def main():
     elif command == "get":
         snippet = get(**arguments)
         print("Retrieved snippet: {!r}".format(snippet))
+    elif command == "update":
+        name, snippet = update(**arguments)
+        print("Updated {!r} with {!r}".format(name, snippet))
+    elif command == "catalogue":
+        print("Keyword Catalogue:")
+        keywordList = catalogue()
+        for name in keywordList:
+            print(name)
+        
 
 
 if __name__ == "__main__":
